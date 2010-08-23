@@ -3,11 +3,13 @@ use strict;
 use AnyEvent;
 use Carp ();
 use Encode ();
-use Any::Moose;
+use Moose;
 use MIME::Base64 ();
 use JSON;
 use Try::Tiny;
 use Tatsumaki::Error;
+
+with 'MooseX::LogDispatch', 'MooseX::Clone';
 
 has application => (is => 'rw', isa => 'Tatsumaki::Application');
 has condvar  => (is => 'rw', isa => 'AnyEvent::CondVar');
