@@ -5,35 +5,25 @@ use Tatsumaki::Handler;
 use Tatsumaki::Request;
 use Try::Tiny;
 
+require Bread::Board;
+
 use Plack::Middleware::Static;
 
 use overload q(&{}) => sub { shift->psgi_app }, fallback => 1;
 
-has _rules   => (is => 'rw', isa => 'ArrayRef');
+has breadboard => ( is => 'rw', isa => 'Bread::Board::Container' );
+has _rules   => (is => 'rw', isa => 'ArrayRef', default => sub { [] });
 has template => (is => 'rw', isa => 'Tatsumaki::Template', lazy_build => 1, handles => [ 'render_file' ]);
 
 has static_path => (is => 'rw', isa => 'Str', default => 'static');
 has _services   => (is => 'rw', isa => 'HashRef', default => sub { +{} });
 
-around BUILDARGS => sub {
-    my $orig = shift;
-    my $class = shift;
-    if (ref $_[0] eq 'ARRAY') {
-        my $handlers = shift @_;
-        my @rules;
-        while (my($path, $handler) = splice @$handlers, 0, 2) {
-            $path = qr@^/$@    if $path eq '/';
-            $path = qr/^$path/ unless ref $path eq 'RegExp';
-            push @rules, { path => $path, handler => $handler };
-        }
-        $class->$orig(_rules => \@rules, @_);
-    } else {
-        $class->$orig(@_);
-    }
-};
-
 sub add_handlers {
     my $self = shift;
+    if( ref $_[0] ){
+        @_ = @{$_[0]};
+    }
+
     while (my($path, $handler) = splice @_, 0, 2) {
         $self->route($path, $handler);
     }
@@ -52,10 +42,16 @@ sub dispatch {
     for my $rule (@{$self->_rules}) {
         if ($path =~ $rule->{path}) {
             my $args = [ $1, $2, $3, $4, $5, $6, $7, $8, $9 ];
-            return $rule->{handler}->new(@_, application => $self, request => $req, args => $args);
+
+            my $service = $rule->{handler};
+            my $handler = $self->breadboard->fetch($service)->get;
+            return $handler->clone(
+                application => $self,
+                request     => $req,
+                args        => $args,
+            );
         }
     }
-
     return;
 }
 
